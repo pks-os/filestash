@@ -6,6 +6,12 @@ import { MODAL_RIGHT_BUTTON } from "../../components/modal.js";
 import t from "../../locales/index.js";
 
 export default function(render, filename) {
+    return document.body.classList.contains("touch-yes")
+        ? renderMobile(render, filename)
+        : renderDesktop(render, filename);
+}
+
+function renderDesktop(render, filename) {
     const $modal = createElement(`
         <div>
             ${t("Rename as")}:
@@ -17,7 +23,7 @@ export default function(render, filename) {
     `);
     const ret = new rxjs.Subject();
     const $input = qs($modal, "input");
-    const pressOK = render($modal, function (id) {
+    const pressOK = render($modal, function(id) {
         const value = $input.value.trim();
         if (id !== MODAL_RIGHT_BUTTON) {
             return;
@@ -39,6 +45,15 @@ export default function(render, filename) {
         preventDefault(),
         rxjs.tap(pressOK),
     ));
-
     return ret.toPromise();
+}
+
+function renderMobile(_, filename) {
+    return new Promise((done) => {
+        const value = window.prompt(t("Rename as"), filename);
+        if (!value || value === filename) {
+            return;
+        }
+        done(value);
+    });
 }

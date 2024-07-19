@@ -1,6 +1,5 @@
-import { createElement, createRender, onDestroy } from "../lib/skeleton/index.js";
+import { createElement, createRender } from "../lib/skeleton/index.js";
 import { navigate } from "../lib/skeleton/router.js";
-import rxjs, { effect } from "../lib/rx.js";
 import { qs } from "../lib/dom.js";
 import { loadCSS } from "../helpers/loader.js";
 import WithShell, { init as initShell } from "../components/decorator_shell_filemanager.js";
@@ -10,7 +9,6 @@ import componentSubmenu, { init as initSubmenu } from "./filespage/ctrl_submenu.
 import componentNewItem, { init as initNewItem } from "./filespage/ctrl_newitem.js";
 import componentUpload, { init as initUpload } from "./filespage/ctrl_upload.js";
 import { init as initCache } from "./filespage/cache.js";
-import { hooks } from "./filespage/model_files.js";
 
 import "../components/breadcrumb.js";
 
@@ -19,6 +17,7 @@ export default WithShell(function(render) {
         navigate(location.pathname + "/");
         return;
     }
+
     const $page = createElement(`
         <div class="component_page_filespage scroll-y">
             <div is="component_upload"></div>
@@ -39,9 +38,7 @@ export default WithShell(function(render) {
     componentNewItem(createRender(qs($page, "[is=\"component_newitem\"]")));
 
     // feature4: render the upload button
-    onDestroy(hooks.ls.listen(() => {
-        componentUpload(createRender(qs($page, "[is=\"component_upload\"]")));
-    }));
+    componentUpload(createRender(qs($page, "[is=\"component_upload\"]")));
 });
 
 export function init() {

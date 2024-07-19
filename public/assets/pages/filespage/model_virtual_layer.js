@@ -27,14 +27,7 @@ const mutationFiles$ = new rxjs.BehaviorSubject({
     // "/home/": [{ name: "test", fn: (file) => file, ...]
 });
 
-
-window.debug = () => {
-    console.log("VIRTUAL", JSON.stringify(virtualFiles$.value, null, 4));
-    console.log("MUTATION", JSON.stringify(mutationFiles$.value));
-};
-
 class IVirtualLayer {
-    constructor() {}
     before() { throw new Error("NOT_IMPLEMENTED"); }
     async afterSuccess() { throw new Error("NOT_IMPLEMENTED"); }
     async afterError() { throw new Error("NOT_IMPLEMENTED"); }
@@ -58,8 +51,6 @@ export function touch(path) {
     };
 
     return new class TouchVL extends IVirtualLayer {
-        constructor() { super(); }
-
         before() {
             stateAdd(virtualFiles$, basepath, {
                 ...file,
@@ -77,13 +68,13 @@ export function touch(path) {
             hooks.mutation.emit({ op: "touch", path: basepath });
         }
 
-        async afterError(err, caught) {
+        async afterError() {
             statePop(virtualFiles$, basepath, filename);
             return rxjs.of(fscache().remove(basepath)).pipe(
                 rxjs.mergeMap(() => rxjs.EMPTY),
             );
         }
-    }
+    }();
 }
 
 export function mkdir(path) {
@@ -96,8 +87,6 @@ export function mkdir(path) {
     };
 
     return new class MkdirVL extends IVirtualLayer {
-        constructor() { super(); }
-
         before() {
             stateAdd(virtualFiles$, basepath, {
                 ...file,
@@ -116,13 +105,13 @@ export function mkdir(path) {
             hooks.mutation.emit({ op: "mkdir", path: basepath });
         }
 
-        async afterError(err, caught) {
+        async afterError() {
             statePop(virtualFiles$, basepath, dirname);
             return rxjs.of(fscache().remove(basepath)).pipe(
                 rxjs.mergeMap(() => rxjs.EMPTY),
             );
         }
-    }
+    }();
 }
 
 export function save(path, size) {
@@ -135,8 +124,6 @@ export function save(path, size) {
     };
 
     return new class SaveVL extends IVirtualLayer {
-        constructor() { super(); }
-
         before() {
             stateAdd(virtualFiles$, basepath, {
                 ...file,
@@ -159,22 +146,20 @@ export function save(path, size) {
             statePop(virtualFiles$, basepath, filename);
             return rxjs.EMPTY;
         }
-    }
+    }();
 }
 
 export function rm(...paths) {
     if (paths.length === 0) return rxjs.of(null);
     const arr = new Array(paths.length * 2);
     let basepath = null;
-    for (let i=0;i<paths.length;i++) {
+    for (let i=0; i<paths.length; i++) {
         [arr[2*i], arr[2*i+1]] = extractPath(paths[i]);
         if (i === 0) basepath = arr[2*i];
         else if (basepath !== arr[2*i]) throw new Error("NOT_IMPLEMENTED");
     }
 
     return new class RmVL extends IVirtualLayer {
-        constructor() { super(); }
-
         before() {
             for (let i=0; i<arr.length; i+=2) {
                 stateAdd(mutationFiles$, arr[i], {
@@ -192,7 +177,7 @@ export function rm(...paths) {
         }
 
         async afterSuccess() {
-            for (let i=0;i<arr.length;i+=2) {
+            for (let i=0; i<arr.length; i+=2) {
                 stateAdd(mutationFiles$, arr[i], {
                     name: arr[i+1],
                     fn: (file) => {
@@ -204,14 +189,14 @@ export function rm(...paths) {
                 });
             }
             onDestroy(() => {
-                for (let i=0;i<arr.length;i+=2) {
+                for (let i=0; i<arr.length; i+=2) {
                     statePop(mutationFiles$, arr[i], arr[i+1]);
                 }
             });
             await Promise.all(paths.map((path) => fscache().remove(path, false)));
             await fscache().update(basepath, ({ files = [], ...rest }) => ({
                 files: files.filter(({ name }) => {
-                    for (let i=0;i<arr.length;i+=2) {
+                    for (let i=0; i<arr.length; i+=2) {
                         if (name === arr[i+1]) {
                             return false;
                         }
@@ -224,7 +209,7 @@ export function rm(...paths) {
         }
 
         async afterError() {
-            for (let i=0;i<arr.length;i+=2) {
+            for (let i=0; i<arr.length; i+=2) {
                 stateAdd(mutationFiles$, arr[i], {
                     name: arr[i+1],
                     fn: (file) => {
@@ -238,7 +223,7 @@ export function rm(...paths) {
             }
             return rxjs.EMPTY;
         }
-    }
+    }();
 }
 
 export function mv(fromPath, toPath) {
@@ -247,12 +232,11 @@ export function mv(fromPath, toPath) {
     let type = null;
 
     return new class MvVL extends IVirtualLayer {
-        constructor(){ super(); }
-
         before() {
             if (fromBasepath === toBasepath) this._beforeSamePath();
             else this._beforeSamePath();
         }
+
         _beforeSamePath() {
             stateAdd(mutationFiles$, fromBasepath, {
                 name: fromName,
@@ -266,6 +250,7 @@ export function mv(fromPath, toPath) {
                 },
             });
         }
+
         _beforeDifferentPath() {
             stateAdd(mutationFiles$, fromBasepath, {
                 name: fromName,
@@ -290,6 +275,7 @@ export function mv(fromPath, toPath) {
             if (fromBasepath === toBasepath) await this._afterSuccessSamePath();
             else await this._afterSuccessDifferentPath();
         }
+
         async _afterSuccessSamePath() {
             stateAdd(mutationFiles$, fromBasepath, {
                 name: fromName,
@@ -311,6 +297,7 @@ export function mv(fromPath, toPath) {
             });
             hooks.mutation.emit({ op: "mv", path: fromBasepath });
         }
+
         async _afterSuccessDifferentPath() {
             stateAdd(mutationFiles$, fromBasepath, {
                 name: fromName,
@@ -322,9 +309,9 @@ export function mv(fromPath, toPath) {
             onDestroy(() => statePop(mutationFiles$, fromBasepath, fromName));
             statePop(virtualFiles$, toBasepath, toName);
             await fscache().update(fromBasepath, ({ files = [], ...rest }) => ({
-                files: files.filter((file) => file.name === fromName ? false : true),
+                files: files.filter((file) => file.name !== fromName),
                 ...rest,
-            }))
+            }));
             await fscache().update(toBasepath, ({ files = [], ...rest }) => ({
                 files: files.concat([{
                     name: fromName,
@@ -345,7 +332,7 @@ export function mv(fromPath, toPath) {
             }
             return rxjs.EMPTY;
         }
-    }
+    }();
 }
 
 export function ls(path) {
@@ -399,7 +386,7 @@ function stateAdd(behavior, path, obj) {
 function statePop(behavior, path, filename) {
     const arr = behavior.value[path];
     if (!arr) return;
-    const newArr = arr.filter(({ name }) => name !== filename)
+    const newArr = arr.filter(({ name }) => name !== filename);
     if (newArr.length === 0) {
         const newState = { ...behavior.value };
         delete newState[path];

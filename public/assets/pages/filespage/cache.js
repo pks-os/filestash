@@ -1,13 +1,11 @@
 import { getSession } from "../../model/session.js";
 
 class ICache {
-    constructor() {}
+    async get() { throw new Error("NOT_IMPLEMENTED"); }
 
-    async get(path) { throw new Error("NOT_IMPLEMENTED"); }
+    async store() { throw new Error("NOT_IMPLEMENTED"); }
 
-    async store(path) { throw new Error("NOT_IMPLEMENTED"); }
-
-    async remove(path, exact = true) { throw new Error("NOT_IMPLEMENTED"); }
+    async remove() { throw new Error("NOT_IMPLEMENTED"); }
 
     async update(path, fn) {
         const data = await this.get(path);
@@ -43,7 +41,7 @@ class InMemoryCache extends ICache {
         }
         for (const k in this.data) {
             if (k.indexOf(key) === 0) {
-                delete data[k];
+                delete this.data[k];
             }
         }
     }
@@ -72,7 +70,7 @@ class IndexDBCache extends ICache {
             request.onsuccess = (e) => {
                 done(e.target.result);
             };
-            request.onerror = (e) => err("INDEXEDDB_NOT_SUPPORTED");
+            request.onerror = () => err(new Error("INDEXEDDB_NOT_SUPPORTED"));
         });
     }
 
@@ -81,9 +79,9 @@ class IndexDBCache extends ICache {
         const tx = db.transaction(this.FILE_PATH, "readonly");
         const store = tx.objectStore(this.FILE_PATH);
         const query = store.get(this._key(path));
-        return await new Promise((done, error) => {
-            query.onsuccess = (e) => done(query.result || null)
-            query.onerror = () => done();
+        return await new Promise((done) => {
+            query.onsuccess = (e) => done(query.result || null);
+            query.onerror = () => done(null);
         });
     }
 
@@ -96,12 +94,12 @@ class IndexDBCache extends ICache {
             ...value,
             backend: currentBackend(),
             share: currentShare(),
-            path: path,
+            path,
         });
         return await new Promise((done, error) => {
             done(value);
             request.onsuccess = () => done(value);
-            request.onerror = err;
+            request.onerror = error;
         });
     }
 
@@ -112,7 +110,7 @@ class IndexDBCache extends ICache {
         const key = this._key(path);
 
         if (exact !== true) {
-            let request = store.openCursor(IDBKeyRange.bound(
+            const request = store.openCursor(IDBKeyRange.bound(
                 [key[0], key[1], key[2]],
                 [key[0], key[1], key[2]+"\u{FFFF}".repeat(5000)],
                 true, true,
@@ -125,7 +123,7 @@ class IndexDBCache extends ICache {
                         cursor.continue();
                         return;
                     }
-                    done();
+                    done(null);
                 };
                 request.onerror = err;
             });
@@ -133,7 +131,7 @@ class IndexDBCache extends ICache {
 
         const req = store.delete(key);
         return await new Promise((done, err) => {
-            req.onsuccess = () => done();
+            req.onsuccess = () => done(null);
             req.onerror = err;
         });
     }
@@ -143,7 +141,6 @@ class IndexDBCache extends ICache {
     }
 
     _migration(event) {
-        let store;
         const db = event.target.result;
         if (event.oldVersion === 1) {
             // we've change the schema on v2 adding an index, let's flush
@@ -166,7 +163,7 @@ class IndexDBCache extends ICache {
             db.deleteObjectStore("file_content");
             db.deleteObjectStore("file_tag");
         }
-        store = db.createObjectStore(this.FILE_PATH, { keyPath: ["backend", "share", "path"] });
+        const store = db.createObjectStore(this.FILE_PATH, { keyPath: ["backend", "share", "path"] });
         store.createIndex("idx_path", ["backend", "share", "path"], { unique: true });
     }
 }
@@ -184,17 +181,17 @@ export async function init() {
 
         cache = new IndexDBCache();
         return cache.db.catch((err) => {
-            if (err === "INDEXEDDB_NOT_SUPPORTED") {
+            if (err.message === "INDEXEDDB_NOT_SUPPORTED") {
                 // Firefox in private mode act like if it supports indexedDB but
                 // is throwing that string as an error if you try to use it ...
                 // so we fallback with our basic ram cache
-                cache = new DataFromMemory();
+                cache = new InMemoryCache();
                 return;
             }
             throw err;
         });
-    }
-    const setup_session = async () => {
+    };
+    const setup_session = async() => {
         if (!backendID) {
             try {
                 const session = await getSession().toPromise();

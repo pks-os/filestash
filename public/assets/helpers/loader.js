@@ -1,5 +1,4 @@
 import { get as getRelease } from "../pages/adminpage/model_release.js";
-import { toHref } from "../lib/skeleton/router.js";
 
 let version = null;
 
@@ -13,8 +12,8 @@ export async function loadJS(baseURL, path, opts = {}) {
     if (document.head.querySelector(`[src="${link.toString()}"]`)) return Promise.resolve();
     document.head.appendChild($script);
     return new Promise((done) => {
-        $script.onload = done;
-        $script.onerror = done;
+        $script.onload = () => done();
+        $script.onerror = () => done();
     });
 }
 

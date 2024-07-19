@@ -76,7 +76,7 @@ export const mv = (from, to) => ajax({
     handleError,
 );
 
-export const save = (path) => rxjs.of(null).pipe(rxjs.delay(1000));
+export const save = () => rxjs.of(null).pipe(rxjs.delay(1000));
 
 export const ls = (path) => {
     const lsFromCache = (path) => rxjs.from(fscache().get(path));
@@ -90,9 +90,9 @@ export const ls = (path) => {
             files: responseJSON.results,
             permissions: responseJSON.permissions,
         })),
-        rxjs.tap((data) => {
-            fscache().store(path, data);
-            hooks.ls.emit({ path, data });
+        rxjs.tap(({ files, permissions }) => {
+            fscache().store(path, { files, permissions });
+            hooks.ls.emit({ path, files, permissions });
         }),
     );
 
@@ -101,7 +101,7 @@ export const ls = (path) => {
         rxjs.merge(
             rxjs.of(null),
             rxjs.merge(rxjs.of(null), rxjs.fromEvent(window, "keydown").pipe( // "r" shorcut
-                rxjs.filter((e) => e.keyCode === 82 && document.activeElement.tagName !== "INPUT"),
+                rxjs.filter((e) => e.keyCode === 82 && assert.type(document.activeElement, window.HTMLElement).tagName !== "INPUT"),
             )).pipe(rxjs.switchMap(() => lsFromHttp(path))),
         ),
     ).pipe(
@@ -138,7 +138,7 @@ export const search = (term) => ajax({
     files: responseJSON.results,
 })));
 
-class hook {
+class Hook {
     constructor() {
         this.list = [];
         this.id = 0;
@@ -151,7 +151,7 @@ class hook {
         this.id += 1;
         return () => {
             this.list = this.list.filter((obj) => obj.id !== id);
-        }
+        };
     }
 
     emit(data) {
@@ -160,8 +160,8 @@ class hook {
 }
 
 export const hooks = {
-    ls: new hook(),
-    mutation: new hook(),
+    ls: new Hook(),
+    mutation: new Hook(),
     // ...
     // add hooks on a needed basis
 };

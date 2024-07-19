@@ -18,7 +18,7 @@ const STATUS_PLAYING = "PLAYING";
 const STATUS_PAUSED = "PAUSED";
 // const STATUS_BUFFERING = "BUFFERING";
 
-export default function(render, { mime }) {
+export default function(render) {
     const $page = createElement(`
         <div class="component_audioplayer">
             <component-menubar></component-menubar>
@@ -55,7 +55,7 @@ export default function(render, { mime }) {
         </div>
     `);
     render($page);
-    renderMenubar(qs($page, "component-menubar"), buttonDownload(getFilename(), getDownloadUrl()))
+    renderMenubar(qs($page, "component-menubar"), buttonDownload(getFilename(), getDownloadUrl()));
 
     transition(qs($page, ".audioplayer_box"));
 
