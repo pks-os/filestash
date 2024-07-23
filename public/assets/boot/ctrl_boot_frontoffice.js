@@ -1,5 +1,5 @@
 import { toHref } from "../lib/skeleton/router.js";
-import { init as setup_loader, loadJS } from "../helpers/loader.js";
+import { loadJS } from "../helpers/loader.js";
 import { init as setup_translation } from "../locales/index.js";
 import { init as setup_config } from "../model/config.js";
 import { init as setup_chromecast } from "../model/chromecast.js";
@@ -14,8 +14,8 @@ export default async function main() {
             setup_device(),
             // setup_sw(), // TODO
             setup_blue_death_screen(),
-            setup_loader(),
             setup_history(),
+            setup_polyfill(),
         ]);
 
         await Promise.all([ // procedure with dependency on config
@@ -69,7 +69,7 @@ async function setup_device() {
     });
 }
 
-async function setup_sw() {
+async function setup_sw() { // eslint-disable-line no-unused-vars
     if (!("serviceWorker" in window.navigator)) return;
 
     if (window.navigator.userAgent.indexOf("Mozilla/") !== -1 &&
@@ -93,7 +93,7 @@ async function setup_blue_death_screen() {
         if ("serviceWorker" in navigator) navigator.serviceWorker
             .getRegistrations()
             .then((registrations) => {
-                for (let registration of registrations) {
+                for (const registration of registrations) {
                     registration.unregister();
                 }
             });
@@ -117,4 +117,10 @@ async function setup_history() {
 
 async function setup_title() {
     document.title = window.CONFIG.name || "Filestash";
+}
+
+async function setup_polyfill() {
+    if (!("replaceChildren" in document.body)) {
+        await loadJS(import.meta.url, "../lib/polyfill.js");
+    }
 }

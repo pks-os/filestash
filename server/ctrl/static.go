@@ -190,9 +190,13 @@ func ServeBackofficeHandler(ctx *App, res http.ResponseWriter, req *http.Request
 	head.Set("Cache-Control", "no-cache")
 	head.Set("Pragma", "no-cache")
 	head.Set("Expires", "0")
-	head.Set("Clear-Site-Data", "cache")
 	for _, href := range preloadScripts {
-		head.Add("Link", fmt.Sprintf(`<%s>; rel="preload"; as="script"; crossorigin="anonymous";`, WithBase(href)))
+		head.Add(
+			"Link",
+			fmt.Sprintf(`<%s>; rel="preload"; as="script"; crossorigin="anonymous";`, WithBase(
+				strings.Replace(href, "/assets/", "/assets/"+version()+"/", 1),
+			)),
+		)
 	}
 	head.Add("Link", `<`+WithBase("/about")+`>; rel="preload"; as="fetch"; crossorigin="use-credentials";`)
 
@@ -250,8 +254,7 @@ func ServeFrontofficeHandler(ctx *App, res http.ResponseWriter, req *http.Reques
 			"/assets/pages/connectpage/model_config.js", "/assets/pages/connectpage/model_backend.js", "/assets/pages/connectpage/ctrl_form_state.js",
 
 			"/assets/lib/form.js", "/assets/lib/settings.js", "/assets/lib/random.js", "/assets/helpers/log.js",
-			"/assets/model/session.js", "/assets/pages/adminpage/model_release.js",
-			"/assets/components/form.js",
+			"/assets/model/session.js", "/assets/components/form.js",
 			"/assets/pages/ctrl_error.js",
 		)
 	} else if strings.HasPrefix(turl, "/files/") {
@@ -264,7 +267,6 @@ func ServeFrontofficeHandler(ctx *App, res http.ResponseWriter, req *http.Reques
 
 			"/assets/pages/filespage/ctrl_submenu.js", "/assets/pages/filespage/ctrl_newitem.js",
 			"/assets/pages/filespage/cache.js", "/assets/pages/ctrl_filespage.js",
-			"/assets/pages/adminpage/model_release.js", "/assets/pages/filespage/modal_embed.js",
 			"/assets/pages/filespage/thing.js", "/assets/pages/ctrl_error.js", "/assets/pages/filespage/model_virtual_layer.js",
 			"/assets/pages/filespage/model_files.js", "/assets/pages/filespage/helper.js",
 			"/assets/pages/filespage/model_acl.js", "/assets/pages/filespage/state_config.js",
@@ -281,11 +283,14 @@ func ServeFrontofficeHandler(ctx *App, res http.ResponseWriter, req *http.Reques
 	head.Set("Cache-Control", "no-cache")
 	head.Set("Pragma", "no-cache")
 	head.Set("Expires", "0")
-	head.Set("Clear-Site-Data", "cache")
 	for _, href := range preloadScripts {
-		head.Add("Link", fmt.Sprintf(`<%s>; rel="preload"; as="script"; crossorigin="anonymous";`, WithBase(href)))
+		head.Add(
+			"Link",
+			fmt.Sprintf(`<%s>; rel="preload"; as="script"; crossorigin="anonymous";`, WithBase(
+				strings.Replace(href, "/assets/", "/assets/"+version()+"/", 1),
+			)),
+		)
 	}
-	head.Add("Link", `<`+WithBase("/about")+`>; rel="preload"; as="fetch"; crossorigin="use-credentials";`)
 
 	ServeIndex("index.frontoffice.html")(ctx, res, req)
 }
@@ -419,12 +424,20 @@ func CustomCssHandler(ctx *App, res http.ResponseWriter, req *http.Request) {
 
 func ServeFile(chroot string) func(*App, http.ResponseWriter, *http.Request) {
 	return func(ctx *App, res http.ResponseWriter, req *http.Request) {
-		filePath := JoinPath(chroot, TrimBase(req.URL.Path))
+		filePath := JoinPath(
+			chroot,
+			strings.Replace(
+				TrimBase(req.URL.Path),
+				"assets/"+version()+"/",
+				"assets/",
+				1,
+			),
+		)
 		head := res.Header()
 
 		// case: patch must be apply because of a "StaticPatch" plugin
 		for _, patch := range Hooks.Get.StaticPatch() {
-			patchFile, err := patch.Open(strings.TrimPrefix(TrimBase(req.URL.Path), "/"))
+			patchFile, err := patch.Open(strings.TrimPrefix(filePath, "/"))
 			if err != nil {
 				continue
 			}
@@ -499,9 +512,6 @@ func ServeFile(chroot string) func(*App, http.ResponseWriter, *http.Request) {
 			if cfg.ContentType != "" {
 				head.Set("Content-Encoding", cfg.ContentType)
 			}
-			head.Set("Cache-Control", "no-cache")
-			head.Set("Pragma", "no-cache")
-			head.Set("Expires", "0")
 			res.WriteHeader(http.StatusOK)
 			io.Copy(res, file)
 			file.Close()
@@ -532,7 +542,9 @@ func ServeIndex(indexPath string) func(*App, http.ResponseWriter, *http.Request)
 		head.Set("Content-Type", "text/html")
 		res.WriteHeader(http.StatusOK)
 		template.Must(template.New(indexPath).Parse(string(b))).Execute(res, map[string]any{
-			"base": WithBase("/"),
+			"base":    WithBase("/"),
+			"version": version(),
+			"license": LICENSE,
 		})
 	}
 }
@@ -566,4 +578,8 @@ func InitPluginList(code []byte) {
 			)
 		}
 	}
+}
+
+func version() string {
+	return BUILD_REF[:7]
 }
