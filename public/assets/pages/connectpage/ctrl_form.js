@@ -198,8 +198,7 @@ export default async function(render) {
             return rxjs.of(null).pipe(
                 rxjs.tap(() => toggleLoader(true)),
                 rxjs.mergeMap(() => createSession(formData)),
-                rxjs.tap(({ responseJSON, responseHeaders }) => {
-                    if (responseHeaders.bearer) window.BEARER_TOKEN = responseHeaders.bearer; // fix https://support.apple.com/en-au/guide/safari/sfri40732/mac
+                rxjs.tap(({ responseJSON }) => {
                     let redirectURL = toHref("/files/");
                     const GET = getURLParams();
                     if (GET["next"]) redirectURL = GET["next"];
