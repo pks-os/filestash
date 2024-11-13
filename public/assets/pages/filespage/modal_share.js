@@ -3,7 +3,7 @@ import { toHref } from "../../lib/skeleton/router.js";
 import rxjs, { effect, onClick } from "../../lib/rx.js";
 import assert from "../../lib/assert.js";
 import ajax from "../../lib/ajax.js";
-import { forwardURLParams } from "../../lib/path.js";
+import { forwardURLParams, join } from "../../lib/path.js";
 import { qs, qsa } from "../../lib/dom.js";
 import { randomString } from "../../lib/random.js";
 import { animate } from "../../lib/animate.js";
@@ -54,7 +54,7 @@ export default function(render, { path }) {
         onClick(qs($modal, `[data-role="uploader"]`)).pipe(toggle("uploader")),
         role$.asObservable(),
     ).pipe(rxjs.tap(() => {
-        const ctrl = role$.value === null ? ctrlExistingShare : ctrlCreateShare;
+        const ctrl = role$.value === null ? ctrlListShares : ctrlCreateShare;
 
         // feature: set active button
         for (const $button of qs($modal, ".share--content").children) {
@@ -85,8 +85,6 @@ export default function(render, { path }) {
                     body,
                     url: `api/share/${id}`,
                 }).toPromise();
-                ;
-                // if (state.links === null) assert.fail("ttest");
                 assert.truthy(state.links).push({
                     ...body,
                     path: body.path.substring(currentPath().length - 1),
@@ -103,11 +101,18 @@ export default function(render, { path }) {
             },
             all: async() => {
                 const { responseJSON } = await ajax({
-                    url: `api/share?path=` + currentPath(),
+                    url: `api/share?path=` + encodeURIComponent(path),
                     method: "GET",
                     responseType: "json",
                 }).toPromise();
-                state.links = responseJSON.results;
+                const currentFolder = path.replace(new RegExp("/$"), "").split("/").pop();
+                const sharedLinkIsFolder = new RegExp("/$").test(path);
+                state.links = responseJSON.results.map((obj) => {
+                    obj.path = sharedLinkIsFolder
+                        ? `./${currentFolder}${obj.path}`
+                        : `./${currentFolder}`;
+                    return obj;
+                });
                 return responseJSON.results;
             },
         });
@@ -116,7 +121,7 @@ export default function(render, { path }) {
     return ret.toPromise();
 }
 
-async function ctrlExistingShare(render, { load, remove, all, formLinks }) {
+async function ctrlListShares(render, { load, remove, all, formLinks }) {
     const $page = createElement(`
         <div class="hidden">
             <h2>${t("Existing Links")}</h2>
@@ -144,7 +149,7 @@ async function ctrlExistingShare(render, { load, remove, all, formLinks }) {
             const $share = createElement(`
                 <div class="link-details no-select">
                     <div class="copy role">${t(shareObjToRole(shareObj))}</div>
-                    <div class="copy path">.${shareObj.path}</div>
+                    <div class="copy path" title="${shareObj.path}">${shareObj.path}</div>
                     <div class="link-details--icons">
                         <img class="component_icon" draggable="false" src="${IMAGE.DELETE}" alt="delete">
                         <img class="component_icon" draggable="false" src="${IMAGE.EDIT}" alt="edit">
@@ -172,6 +177,10 @@ async function ctrlExistingShare(render, { load, remove, all, formLinks }) {
 }
 
 async function ctrlCreateShare(render, { save, formState }) {
+    if (formState.path) formState.path = join(
+        location.origin + currentPath(),
+        formState.path,
+    );
     let id = formState.id || randomString(7);
     const $page = createElement(`
         <div>
@@ -231,6 +240,9 @@ async function ctrlCreateShare(render, { save, formState }) {
         url: {
             id: "link",
             type: "text",
+        },
+        path: {
+            type: "hidden",
         },
     };
     const tmpl = formTmpl({

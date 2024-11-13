@@ -44,6 +44,9 @@
     text-overflow: ellipsis;
     display: flex;
 }
+[is="component_submenu"] .component_submenu .action.left button {
+    min-width: 50px;
+}
 .touch-no [is="component_submenu"] .component_submenu .action.right:hover,
 [is="component_submenu"] .component_submenu .action.right.hover{
     background: var(--border);
