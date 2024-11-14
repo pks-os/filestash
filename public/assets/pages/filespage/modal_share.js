@@ -112,8 +112,11 @@ export default function(render, { path }) {
                         ? `./${currentFolder}${obj.path}`
                         : `./${currentFolder}`;
                     return obj;
+                }).sort((a, b) => {
+                    if (a.path === b.path) return a.id > b.id ? 1 : -1;
+                    return a.path > b.path ? 1 : -1;
                 });
-                return responseJSON.results;
+                return state.links;
             },
         });
     })));
@@ -299,11 +302,11 @@ async function ctrlCreateShare(render, { save, formState }) {
     effect(onClick(qs($page, ".shared-link")).pipe(
         rxjs.first(),
         rxjs.switchMap(async() => {
-            const body = [...new FormData(assert.type(qs(document.body, ".component_share form"), HTMLFormElement))]
-                .reduce((acc, [key, value]) => {
-                    if (value && key.slice(-7) !== "_enable") acc[key] = value;
-                    return acc;
-                }, { id });
+            const form = new FormData(assert.type(qs(document.body, ".component_share form"), HTMLFormElement));
+            const body = [...form].reduce((acc, [key, value]) => {
+                if (form.has(`${key}_enable`)) acc[key] = value;
+                return acc;
+            }, { id, path: form.get("path") });
             $copy.setAttribute("src", IMAGE.LOADING);
             const link = location.origin + forwardURLParams(toHref(`/s/${id}`), ["share"]);
             await save(body);
