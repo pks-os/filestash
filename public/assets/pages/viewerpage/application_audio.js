@@ -16,7 +16,7 @@ import { transition, getFilename, getDownloadUrl } from "./common.js";
 
 const STATUS_PLAYING = "PLAYING";
 const STATUS_PAUSED = "PAUSED";
-// const STATUS_BUFFERING = "BUFFERING";
+const STATUS_BUFFERING = "BUFFERING";
 
 export default function(render) {
     const $page = createElement(`
@@ -100,19 +100,19 @@ export default function(render) {
     };
     const setStatus = (status, wavesurfer) => {
         switch (status) {
-        case "PLAYING":
+        case STATUS_PLAYING:
             $control.play.classList.add("hidden");
             $control.pause.classList.remove("hidden");
             $control.loading.classList.add("hidden");
             wavesurfer.backend.ac.resume();
             break;
-        case "PAUSED":
+        case STATUS_PAUSED:
             $control.play.classList.remove("hidden");
             $control.pause.classList.add("hidden");
             $control.loading.classList.add("hidden");
             wavesurfer.backend.ac.suspend();
             break;
-        case "BUFFERING":
+        case STATUS_BUFFERING:
             $control.play.classList.add("hidden");
             $control.pause.classList.add("hidden");
             $control.loading.classList.remove("hidden");
@@ -126,7 +126,6 @@ export default function(render) {
         wavesurfer.backend.source.stop(0);
         wavesurfer.backend.disconnectSource();
         wavesurfer.backend.createSource();
-        wavesurfer.backend.startPosition = newTime;
         wavesurfer.backend.source.start(0, newTime);
     };
 
@@ -145,7 +144,7 @@ export default function(render) {
         }))),
         rxjs.tap((wavesurfer) => {
             wavesurfer.load(getDownloadUrl());
-            wavesurfer.on("error", (err) => { // TODO: one liner to check
+            wavesurfer.on("error", (err) => {
                 throw new Error(err);
             });
             wavesurfer.on("ready", () => {
@@ -186,10 +185,9 @@ export default function(render) {
     );
     effect(ready$.pipe(rxjs.tap((wavesurfer) => {
         wavesurfer.backend.createSource();
-        wavesurfer.backend.startPosition = 0;
-        wavesurfer.backend.lastPlay = 0;
         wavesurfer.backend.source.start(0, 0);
         wavesurfer.backend.ac.suspend();
+        currentTime$.next([0, wavesurfer.backend.ac.currentTime]);
     })));
 
     // feature4: hint of song progress
@@ -200,15 +198,13 @@ export default function(render) {
         )),
         rxjs.first(),
         rxjs.mergeMap((status) => setup$.pipe(rxjs.tap((wavesurfer) => setStatus(status, wavesurfer)))),
-        rxjs.switchMap((wavesurfer) => rxjs.animationFrames().pipe(
-            rxjs.tap(() => {
-                const _currentTime = currentTime(wavesurfer);
-                const percent = _currentTime / wavesurfer.getDuration();
-                if (percent > 1) return;
-                wavesurfer.drawer.progress(percent);
-                qs($control.main, "#currentTime").textContent = formatTimecode(_currentTime);
-            }),
-        )),
+        rxjs.switchMap((wavesurfer) => rxjs.animationFrames().pipe(rxjs.tap(() => {
+            const _currentTime = currentTime(wavesurfer);
+            const percent = _currentTime / wavesurfer.getDuration();
+            if (percent > 1) return;
+            wavesurfer.drawer.progress(percent);
+            qs($control.main, "#currentTime").textContent = formatTimecode(_currentTime);
+        }))),
     ));
 
     // feature5: player control - play / pause
