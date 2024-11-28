@@ -460,6 +460,7 @@ func FileSave(ctx *App, res http.ResponseWriter, req *http.Request) {
 		SendErrorResult(res, NewError(err.Error(), 403))
 	}
 	ctx.Session["path"] = path
+	res.Header().Set("Connection", "Close")
 
 	var uploader *chunkedUpload
 	if c := chunkedUploadCache.Get(ctx.Session); c == nil {
