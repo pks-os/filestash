@@ -213,7 +213,7 @@ func FileCat(ctx *App, res http.ResponseWriter, req *http.Request) {
 
 	// use our cache if necessary (range request) when possible
 	if req.Header.Get("range") != "" {
-		ctx.Session["_path"] = path
+		ctx.Session["fullpath"] = path
 		if p := file_cache.Get(ctx.Session); p != nil {
 			f, err := os.OpenFile(p.(string), os.O_RDONLY, os.ModePerm)
 			if err == nil {
@@ -250,7 +250,9 @@ func FileCat(ctx *App, res http.ResponseWriter, req *http.Request) {
 			}
 			file, err = plgHandler.Generate(file, ctx, &res, req)
 			if err != nil {
-				Log.Debug("cat::thumbnailer '%s'", err.Error())
+				if req.Context().Err() == nil {
+					Log.Debug("cat::thumbnailer '%s'", err.Error())
+				}
 				SendErrorResult(res, err)
 				return
 			}
@@ -284,6 +286,7 @@ func FileCat(ctx *App, res http.ResponseWriter, req *http.Request) {
 				SendErrorResult(res, err)
 				return
 			}
+			file_cache.Set(ctx.Session, tmpPath)
 			if _, err = io.Copy(f, file); err != nil {
 				f.Close()
 				file.Close()
@@ -291,14 +294,20 @@ func FileCat(ctx *App, res http.ResponseWriter, req *http.Request) {
 				SendErrorResult(res, err)
 				return
 			}
-			f.Close()
-			file.Close()
-			if f, err = os.OpenFile(tmpPath, os.O_RDONLY, os.ModePerm); err != nil {
+			if err = f.Sync(); err != nil {
+				f.Close()
+				file.Close()
 				Log.Debug("cat::range2 '%s'", err.Error())
 				SendErrorResult(res, err)
 				return
 			}
-			file_cache.Set(ctx.Session, tmpPath)
+			f.Close()
+			file.Close()
+			if f, err = os.OpenFile(tmpPath, os.O_RDONLY, os.ModePerm); err != nil {
+				Log.Debug("cat::range3 '%s'", err.Error())
+				SendErrorResult(res, err)
+				return
+			}
 			if fi, err := f.Stat(); err == nil {
 				contentLength = fi.Size()
 			}
