@@ -4,7 +4,7 @@ import rxjs, { effect, onClick } from "../../lib/rx.js";
 import { forwardURLParams } from "../../lib/path.js";
 import { animate, slideYOut } from "../../lib/animate.js";
 import { loadCSS } from "../../helpers/loader.js";
-import { qs } from "../../lib/dom.js";
+import { qs, qsa } from "../../lib/dom.js";
 import { AjaxError } from "../../lib/error.js";
 import assert from "../../lib/assert.js";
 import { currentPath, isNativeFileUpload } from "./helper.js";
@@ -59,7 +59,7 @@ function componentUploadFAB(render, { workers$ }) {
     effect(rxjs.fromEvent(qs($page, `input[type="file"]`), "change").pipe(
         rxjs.tap(async(e) => {
             workers$.next({ loading: true });
-            workers$.next(await processFiles(e.target.files))
+            workers$.next(await processFiles(e.target.files));
         }),
     ));
     render($page);
@@ -78,6 +78,7 @@ function componentFilezone(render, { workers$ }) {
         $target.classList.remove("dropzone");
         e.preventDefault();
         workers$.next({ loading: true });
+
         if (e.dataTransfer.items instanceof window.DataTransferItemList) {
             workers$.next(await processItems(e.dataTransfer.items));
         } else if (e.dataTransfer.files instanceof window.FileList) {
@@ -113,6 +114,7 @@ function componentUploadQueue(render, { workers$ }) {
         </div>
     `);
     render($page);
+
     const $content = qs($page, ".stats_content");
     const $file = createElement(`
         <div class="file_row todo_color">
@@ -171,7 +173,7 @@ function componentUploadQueue(render, { workers$ }) {
     // feature3: process tasks
     const ICON = {
         STOP: "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+Cjxzdmcgdmlld0JveD0iMCAwIDM4NCA1MTIiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPHBhdGggc3R5bGU9ImZpbGw6ICM2MjY0Njk7IiBkPSJNMCAxMjhDMCA5Mi43IDI4LjcgNjQgNjQgNjRIMzIwYzM1LjMgMCA2NCAyOC43IDY0IDY0VjM4NGMwIDM1LjMtMjguNyA2NC02NCA2NEg2NGMtMzUuMyAwLTY0LTI4LjctNjQtNjRWMTI4eiIgLz4KPC9zdmc+Cg==",
-        RETRY: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgd2lkdGg9IjI0Ij48cGF0aCBkPSJNMTcuNjUgNi4zNUMxNi4yIDQuOSAxNC4yMSA0IDEyIDRjLTQuNDIgMC03Ljk5IDMuNTgtNy45OSA4czMuNTcgOCA3Ljk5IDhjMy43MyAwIDYuODQtMi41NSA3LjczLTZoLTIuMDhjLS44MiAyLjMzLTMuMDQgNC01LjY1IDQtMy4zMSAwLTYtMi42OS02LTZzMi42OS02IDYtNmMxLjY2IDAgMy4xNC42OSA0LjIyIDEuNzhMMTMgMTFoN1Y0bC0yLjM1IDIuMzV6Ii8+PHBhdGggZD0iTTAgMGgyNHYyNEgweiIgZmlsbD0ibm9uZSIvPjwvc3ZnPg==",
+        RETRY: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgd2lkdGg9IjI0Ij48cGF0aCBzdHlsZT0iZmlsbDogIzYyNjQ2OTsiIGQ9Ik0xNy42NSA2LjM1QzE2LjIgNC45IDE0LjIxIDQgMTIgNGMtNC40MiAwLTcuOTkgMy41OC03Ljk5IDhzMy41NyA4IDcuOTkgOGMzLjczIDAgNi44NC0yLjU1IDcuNzMtNmgtMi4wOGMtLjgyIDIuMzMtMy4wNCA0LTUuNjUgNC0zLjMxIDAtNi0yLjY5LTYtNnMyLjY5LTYgNi02YzEuNjYgMCAzLjE0LjY5IDQuMjIgMS43OEwxMyAxMWg3VjRsLTIuMzUgMi4zNXoiLz48L3N2Zz4K",
     };
     const $iconStop = createElement(`<img class="component_icon" draggable="false" src="${ICON.STOP}" alt="stop" title="${t("Aborted")}">`);
     const $iconRetry = createElement(`<img class="component_icon" draggable="false" src="${ICON.RETRY}" alt="retry">`);
@@ -191,6 +193,7 @@ function componentUploadQueue(render, { workers$ }) {
     }(new Array(MAX_WORKERS).fill(0)));
     const updateDOMGlobalTitle = ($page, text) => $page.firstElementChild.nextElementSibling.firstChild.textContent = text;
     const updateDOMWithStatus = ($task, { status, exec, nworker }) => {
+        const cancel = () => exec.cancel();
         const executeMutation = (status) => {
             switch (status) {
             case "todo":
@@ -201,12 +204,14 @@ function componentUploadQueue(render, { workers$ }) {
                 updateDOMTaskProgress($task, formatPercent(0));
                 $task.classList.remove("error_color");
                 $task.classList.add("todo_color");
+                $task.setAttribute("data-status", "running");
                 $task.firstElementChild.nextElementSibling.nextElementSibling.replaceChildren($stop);
                 $stop.onclick = () => {
-                    exec.cancel();
+                    cancel();
+                    $task.removeAttribute("data-status");
                     $task.firstElementChild.nextElementSibling.nextElementSibling.classList.add("hidden");
                 };
-                $close.addEventListener("click", exec.cancel);
+                $close.addEventListener("click", cancel, { once: true });
                 break;
             case "done":
                 updateDOMGlobalTitle($page, t("Done"));
@@ -214,9 +219,10 @@ function componentUploadQueue(render, { workers$ }) {
                 updateDOMGlobalSpeed(nworker, 0);
                 updateDOMTaskSpeed($task, 0);
                 $task.removeAttribute("data-path");
+                $task.removeAttribute("data-status");
                 $task.classList.remove("todo_color");
                 $task.firstElementChild.nextElementSibling.nextElementSibling.classList.add("hidden");
-                $close.removeEventListener("click", exec.cancel);
+                $close.removeEventListener("click", cancel);
                 break;
             case "error":
                 const $retry = assert.type($iconRetry.cloneNode(true), HTMLElement);
@@ -226,6 +232,7 @@ function componentUploadQueue(render, { workers$ }) {
                 updateDOMTaskSpeed($task, 0);
 
                 $task.removeAttribute("data-path");
+                $task.removeAttribute("data-status");
                 $task.classList.remove("todo_color");
                 $task.classList.add("error_color");
                 $task.firstElementChild.nextElementSibling.nextElementSibling.firstElementChild.remove();
@@ -240,7 +247,7 @@ function componentUploadQueue(render, { workers$ }) {
                         executeMutation("error");
                     }
                 };
-                $close.removeEventListener("click", exec.cancel);
+                $close.removeEventListener("click", cancel);
                 break;
             default:
                 assert.fail(`UNEXPECTED_STATUS status="${status}" path="${$task.getAttribute("path")}"`);
@@ -254,11 +261,23 @@ function componentUploadQueue(render, { workers$ }) {
     const processWorkerQueue = async(nworker) => {
         while (tasks.length > 0) {
             updateDOMGlobalTitle($page, t("Running")+"...");
+
+            // step1: retrieve next task
             const task = nextTask(tasks);
             if (!task) {
                 await new Promise((resolve) => setTimeout(resolve, 1000));
                 continue;
             }
+
+            // step2: validate the task is ready to run now
+            const $tasks = qsa($page, `[data-path="${task.path}"][data-status="running"]`);
+            if ($tasks.length > 0) {
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+                tasks.unshift(task);
+                continue;
+            }
+
+            // step3: process the task through its entire lifecycle
             const $task = qs($page, `[data-path="${task.path}"]`);
             const exec = task.exec({
                 progress: (progress) => updateDOMTaskProgress($task, formatPercent(progress)),
@@ -277,6 +296,7 @@ function componentUploadQueue(render, { workers$ }) {
             updateTotal.incrementCompleted();
             task.done = true;
 
+            // step4: execute only at task completion
             if (tasks.length === 0 && // no remaining tasks
                 reservations.filter((t) => t === true).length === 1 // only for the last remaining job
             ) updateDOMGlobalTitle($page, t("Done"));
@@ -295,12 +315,13 @@ function componentUploadQueue(render, { workers$ }) {
     workers$.subscribe(async({ tasks: newTasks, loading = false }) => {
         if (loading) return;
         tasks = tasks.concat(newTasks); // add new tasks to the pool
-        while (true) {
+        while (!$page.classList.contains("hidden")) {
             const nworker = reservations.indexOf(false);
             if (nworker === -1) break; // the pool of workers is already to its max
             reservations[nworker] = true;
             noFailureAllowed(processWorkerQueue.bind(null, nworker)).then(() => reservations[nworker] = false);
         }
+        reservations.fill(false);
     });
 }
 
@@ -323,6 +344,7 @@ function workerImplFile({ progress, speed }) {
          */
         cancel() {
             assert.type(this.xhr, XMLHttpRequest).abort();
+            this.xhr = null;
         }
 
         /**
@@ -340,7 +362,7 @@ function workerImplFile({ progress, speed }) {
             const numberOfChunks = Math.ceil(file.size / chunkSize);
             const headersNoCache = {
                 "Cache-Control": "no-store",
-                "Pragma": "no-cache",
+                "Pragma": "no-cache"
             };
 
             // Case1: basic upload
@@ -371,7 +393,7 @@ function workerImplFile({ progress, speed }) {
                         ...headersNoCache,
                     },
                     body: null,
-                    progress: (n) => progress(n),
+                    progress: (n) => progress(0),
                     speed,
                 });
                 const url = resp.headers.location;
@@ -379,6 +401,7 @@ function workerImplFile({ progress, speed }) {
                     throw new Error("Internal Error");
                 }
                 for (let i=0; i<numberOfChunks; i++) {
+                    if (this.xhr === null) break;
                     const offset = chunkSize * i;
                     resp = await executeHttp.call(this, url, {
                         method: "PATCH",
@@ -577,7 +600,7 @@ async function processFiles(filelist) {
         default:
             assert.fail(`NOT_SUPPORTED type="${type}"`);
         }
-        task = assert.truthy(task);
+        task.virtual.before();
         tasks.push(task);
     }
     return { tasks, size };
@@ -661,7 +684,7 @@ function formatPercent(number) {
 function formatSize(bytes, si = true) {
     const thresh = si ? 1000 : 1024;
     if (Math.abs(bytes) < thresh) {
-        return bytes.toFixed(1) + "B/s";
+        return bytes.toFixed(1) + "B";
     }
     const units = si
         ? ["kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"]
