@@ -12,6 +12,7 @@ import (
 	"text/template"
 
 	. "github.com/mickael-kerjean/filestash/server/common"
+	"github.com/mickael-kerjean/filestash/server/ctrl"
 	"github.com/mickael-kerjean/filestash/server/middleware"
 	"github.com/mickael-kerjean/filestash/server/model"
 
@@ -34,7 +35,7 @@ var WOPIRoutes = func(r *mux.Router, app *App) error {
 }
 
 var WOPIOverrides = `
-    if(mime === "application/word" || mime === "application/msword" ||
+    if (mime === "application/word" || mime === "application/msword" ||
         mime === "application/vnd.oasis.opendocument.text" || mime === "application/vnd.oasis.opendocument.spreadsheet" ||
         mime === "application/excel" || mime === "application/vnd.ms-excel" || mime === "application/powerpoint" ||
         mime === "application/vnd.ms-powerpoint" || mime === "application/vnd.oasis.opendocument.presentation" ) {
@@ -43,7 +44,11 @@ var WOPIOverrides = `
 `
 
 func WOPIHandler_CheckFileInfo(w http.ResponseWriter, r *http.Request) {
-	WOPIExecute(w, r)(func(ctx *App, fullpath string) {
+	if plugin_enable() == false {
+		SendErrorResult(w, ErrNotFound)
+		return
+	}
+	WOPIExecute(w, r)(func(ctx *App, fullpath string, w http.ResponseWriter) {
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(map[string]any{
 			"BaseFileName":     filepath.Base(fullpath),
@@ -59,7 +64,7 @@ func WOPIHandler_CheckFileInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func WOPIHandler_GetFile(w http.ResponseWriter, r *http.Request) {
-	WOPIExecute(w, r)(func(ctx *App, fullpath string) {
+	WOPIExecute(w, r)(func(ctx *App, fullpath string, w http.ResponseWriter) {
 		f, err := ctx.Backend.Cat(fullpath)
 		if err != nil {
 			SendErrorResult(w, err)
@@ -71,7 +76,7 @@ func WOPIHandler_GetFile(w http.ResponseWriter, r *http.Request) {
 
 func WOPIHandler_PutFile(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	WOPIExecute(w, r)(func(ctx *App, fullpath string) {
+	WOPIExecute(w, r)(func(ctx *App, fullpath string, w http.ResponseWriter) {
 		err := ctx.Backend.Save(fullpath, r.Body)
 		if err != nil {
 			SendErrorResult(w, err)
@@ -81,17 +86,26 @@ func WOPIHandler_PutFile(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func WOPIExecute(w http.ResponseWriter, r *http.Request) func(func(*App, string)) {
-	return func(fn func(*App, string)) {
-		path64 := mux.Vars(r)["path64"]
-		p, err := base64.StdEncoding.DecodeString(path64)
+func WOPIExecute(w http.ResponseWriter, r *http.Request) func(func(*App, string, http.ResponseWriter)) {
+	return func(fn func(*App, string, http.ResponseWriter)) {
+		tmp := strings.SplitN(mux.Vars(r)["path64"], "::", 2)
+		if len(tmp) != 2 {
+			SendErrorResult(w, ErrNotValid)
+			return
+		}
+		p, err := base64.StdEncoding.DecodeString(tmp[1])
 		if err != nil {
 			SendErrorResult(w, ErrNotValid)
 			return
 		}
 		middleware.NewMiddlewareChain(
 			func(ctx *App, w http.ResponseWriter, r *http.Request) {
-				fn(ctx, string(p))
+				fullpath, err := ctrl.PathBuilder(ctx, string(p))
+				if err != nil {
+					SendErrorResult(w, err)
+					return
+				}
+				fn(ctx, fullpath, w)
 			},
 			[]Middleware{middleware.SessionStart},
 			App{},
@@ -206,14 +220,27 @@ func wopiDiscovery(ctx *App, fullpath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	myURL := "http://"
-	if Config.Get("general.force_ssl").Bool() {
-		myURL = "https://"
+	myURL := origin()
+	if myURL == "" {
+		myURL := "http://"
+		if Config.Get("general.force_ssl").Bool() {
+			myURL = "https://"
+		}
+		myURL += Config.Get("general.host").String()
 	}
-	myURL += Config.Get("general.host").String()
 	p := u.Query()
-	p.Set("WOPISrc", myURL+"/api/wopi/files/"+base64.StdEncoding.EncodeToString([]byte(fullpath)))
+	backendID := GenerateID(map[string]string{
+		"id":   GenerateID(ctx.Session),
+		"path": fullpath,
+	})
+	p.Set("WOPISrc", myURL+"/api/wopi/files/"+backendID+"::"+base64.StdEncoding.EncodeToString([]byte(fullpath)))
 	p.Set("access_token", ctx.Authorization)
 	u.RawQuery = p.Encode()
+	if newHost := rewrite_url(); newHost != "" {
+		if p, err := url.Parse(newHost); err == nil {
+			u.Host = p.Host
+			u.Scheme = p.Scheme
+		}
+	}
 	return u.String(), nil
 }
