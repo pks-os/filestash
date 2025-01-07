@@ -13,8 +13,8 @@ export function opener(file = "", mimes) {
         return ["editor", { mime }];
     } else if (mime === "application/pdf") {
         return ["pdf", { mime }];
-    } else if (mime === "image/svg+xml") {
-        return ["editor", { mime }];
+    } else if (type === "model" || ["image/svg+xml", "application/object", "application/fbx"].indexOf(mime) !== -1) {
+        return ["3d", { mime }];
     } else if (type === "image") {
         return ["image", { mime }];
     } else if (["application/javascript", "application/xml", "application/json",
@@ -30,11 +30,9 @@ export function opener(file = "", mimes) {
         return ["video", { mime }];
     } else if (["application/epub+zip"].indexOf(mime) !== -1) {
         return ["ebook", { mime }];
-    } else if (type === "model" || ["application/object", "application/fbx"].indexOf(mime) !== -1) {
-        return ["3d", { mime }];
     } else if (mime === "application/x-url") {
         return ["url", { mime }];
-    } else if (["application/dbf"].indexOf(mime) !== -1) {
+    } else if (["application/dbf", "application/x-archive"].indexOf(mime) !== -1) {
         return ["table", { mime }];
     } else if (type === "application" && mime !== "application/text") {
         return ["download", { mime }];
