@@ -51,7 +51,7 @@ export default async function(render, { mime, getDownloadUrl = nop, getFilename 
         rxjs.mergeMap(async({ response }) => {
             const loader = getPlugin(mime);
             if (!loader) throw new TypeError(`unsupported mimetype "${mime}"`);
-            const [_, url] = loader;
+            const [, url] = loader;
             const module = await import(url);
             const table = new (await module.default(ITable))(response, { $menubar });
             STATE.header = table.getHeader();
@@ -70,7 +70,10 @@ export default async function(render, { mime, getDownloadUrl = nop, getFilename 
     const $search = createElement(`<input type="search" placeholder="search">`);
     effect(init$.pipe(
         rxjs.tap(() => $menubar.add($search)),
-        rxjs.mergeMap(() => rxjs.fromEvent($search, "keydown").pipe(rxjs.debounceTime(200))),
+        rxjs.mergeMap(() => rxjs.fromEvent($search, "keyup").pipe(rxjs.debounce((e) => {
+            if (!e.target.value) return rxjs.of(null);
+            return rxjs.timer(300);
+        }))),
         rxjs.tap((e) => {
             const terms = e.target.value.toLowerCase().trim().split(" ");
             $dom.tbody.scrollTo(0, 0);
@@ -98,7 +101,7 @@ export default async function(render, { mime, getDownloadUrl = nop, getFilename 
 
     // feature: infinite scroll
     effect(rxjs.fromEvent($dom.tbody, "scroll").pipe(
-        rxjs.mergeMap(async (e) => {
+        rxjs.mergeMap(async(e) => {
             const scrollBottom = e.target.scrollHeight - (e.target.scrollTop + e.target.clientHeight);
             if (scrollBottom > 0) return;
             else if (STATE.rows.length <= MAX_ROWS) return;
@@ -115,7 +118,7 @@ export default async function(render, { mime, getDownloadUrl = nop, getFilename 
         init$,
         init$.pipe(
             rxjs.mergeMap(() => rxjs.fromEvent(window, "resize")),
-            rxjs.debounce((e) => e.debounce === false ? rxjs.of(null) : rxjs.timer(100)),
+            rxjs.debounce((e) => e["debounce"] === false ? rxjs.of(null) : rxjs.timer(100)),
         ),
     ).pipe(
         rxjs.tap(() => resizeLastColumnIfNeeded({
@@ -159,7 +162,7 @@ async function buildRows(rows, legends, $tbody, padding, isInit, withClear) {
     `));
     if (!isInit) {
         const e = new Event("resize");
-        e.debounce = false;
+        e["debounce"] = false;
         window.dispatchEvent(e);
         await new Promise(requestAnimationFrame);
     }
@@ -219,7 +222,7 @@ function sortBy(rows, ascending, key) {
     const o = ascending ? 1 : -1;
     return rows.sort((a, b) => {
         if (a[key] === b[key]) return 0;
-        else if (a[key] < b[key]) return -o
+        else if (a[key] < b[key]) return -o;
         return o;
     });
 }

@@ -2,14 +2,16 @@ import { createElement, createRender } from "../../lib/skeleton/index.js";
 import rxjs, { effect } from "../../lib/rx.js";
 import { qs } from "../../lib/dom.js";
 import { load as loadPlugin } from "../../model/plugin.js";
+import { loadCSS } from "../../helpers/loader.js";
 import { createLoader } from "../../components/loader.js";
 import ctrlError from "../ctrl_error.js";
+import componentDownloader, { init as initDownloader } from "./application_downloader.js";
 
 export default function(render, { mime, getFilename, getDownloadUrl, acl$ }) {
     const $page = createElement(`
-        <div class="component_skeletonviewer" style="background: #52565911;">
+        <div class="component_skeletonviewer">
             <component-menubar filename="${getFilename()}"></component-menubar>
-            <div class="component_skeleton_container" style="height:100%"></div>
+            <div class="component_skeleton_container flex"></div>
         </div>
     `);
     render($page);
@@ -29,4 +31,11 @@ export default function(render, { mime, getFilename, getDownloadUrl, acl$ }) {
         removeLoader,
         rxjs.catchError(ctrlError()),
     ));
+}
+
+export function init() {
+    return Promise.all([
+        loadCSS(import.meta.url, "./application_skeleton.css"),
+        initDownloader(),
+    ]);
 }
